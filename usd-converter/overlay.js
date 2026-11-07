@@ -24,7 +24,10 @@
     .x { all: unset; cursor: pointer; color: var(--muted); font-size: 18px; line-height: 1; padding: 0 4px; }
     .x:hover { color: var(--fg); }
     .src { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 8px; }
-    .row { display: flex; gap: 6px; }
+    .row { display: flex; gap: 6px; align-items: center; }
+    .row + .row { margin-top: 6px; }
+    .arrow { flex: 0 0 auto; color: var(--muted); padding: 0 2px 0 4px; }
+    .to { flex: 1 1 auto; }
     input, select {
       font: inherit; color: var(--fg); background: var(--bg);
       border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; min-width: 0;
@@ -78,7 +81,20 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  const usdFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+  // Currencies listed first in the "to" dropdown.
+  const COMMON = ["USD", "EUR", "GBP", "JPY", "CNY", "CAD", "AUD", "CHF", "HKD", "SGD", "INR", "KRW", "MXN"];
+
+  function formatMoney(n, code) {
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: code }).format(n);
+    } catch {
+      return `${n.toFixed(2)} ${code}`;
+    }
+  }
+
+  function formatRate(r) {
+    return r < 0.01 ? r.toPrecision(3) : r.toFixed(4);
+  }
 
   function show(msg) {
     close();
@@ -89,13 +105,17 @@
     const card = document.createElement("div");
     card.className = "card";
     card.innerHTML = `
-      <div class="head"><span class="title">Convert to USD</span><button class="x" title="Close">×</button></div>
+      <div class="head"><span class="title">Convert currency</span><button class="x" title="Close">×</button></div>
       <div class="src"></div>
       <div class="row">
         <input class="amt" type="text" inputmode="decimal" placeholder="Amount" aria-label="Amount">
-        <select class="cur" aria-label="Currency"></select>
+        <select class="cur" aria-label="From currency"></select>
       </div>
-      <div class="warn">Couldn't tell which currency this is. Pick one from the list.</div>
+      <div class="row">
+        <span class="arrow">to</span>
+        <select class="to" aria-label="To currency"></select>
+      </div>
+      <div class="warn">Couldn't tell which currency this is. Pick one from the list above.</div>
       <div class="out"></div>
       <div class="foot"></div>
       <div class="credit"><a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates By Exchange Rate API</a></div>`;
@@ -108,16 +128,16 @@
     $(".src").title = msg.text;
 
     if (msg.error) {
-      $(".row").remove();
+      card.querySelectorAll(".row").forEach((el) => el.remove());
       $(".out").innerHTML = "";
       $(".out").className = "out err";
       $(".out").style.fontSize = "13px";
       $(".out").textContent = msg.error;
     } else {
-      const amt = $(".amt"), cur = $(".cur"), out = $(".out"), foot = $(".foot");
+      const amt = $(".amt"), cur = $(".cur"), to = $(".to"), out = $(".out"), foot = $(".foot");
       const codes = Object.keys(msg.rates).sort();
 
-      const addGroup = (label, list) => {
+      const addGroup = (sel, label, list) => {
         const g = document.createElement("optgroup");
         g.label = label;
         for (const c of list) {
@@ -126,30 +146,36 @@
           o.textContent = `${c} – ${currencyName(c)}`;
           g.appendChild(o);
         }
-        cur.appendChild(g);
+        sel.appendChild(g);
       };
       const likely = msg.candidates.length ? msg.candidates : [msg.guess];
-      addGroup(msg.confident ? "Detected" : "Likely", likely);
-      addGroup("All currencies", codes.filter((c) => !likely.includes(c)));
+      addGroup(cur, msg.confident ? "Detected" : "Likely", likely);
+      addGroup(cur, "All currencies", codes.filter((c) => !likely.includes(c)));
       cur.value = msg.guess;
+
+      const target = msg.rates[msg.target] ? msg.target : "USD";
+      const common = [target, ...COMMON.filter((c) => c !== target && msg.rates[c])];
+      addGroup(to, "Common", common);
+      addGroup(to, "All currencies", codes.filter((c) => !common.includes(c)));
+      to.value = target;
 
       if (!msg.confident) {
         cur.classList.add("unsure");
         $(".warn").classList.add("show");
         if (msg.candidates.length > 1) {
           $(".warn").textContent =
-            `This symbol is used by several currencies (${msg.candidates.join(", ")}). Check the selection below.`;
+            `This symbol is used by several currencies (${msg.candidates.join(", ")}). Pick the right one above.`;
         }
       }
       if (msg.amount != null) amt.value = String(+msg.amount.toFixed(6));
 
       const update = () => {
         const a = readAmount(amt.value);
-        const rate = msg.rates[cur.value];
-        if (a == null || !rate) { out.textContent = "—"; foot.textContent = ""; return; }
-        out.textContent = usdFmt.format(a / rate);
-        const per = 1 / rate;
-        foot.textContent = `1 ${cur.value} = ${per < 0.01 ? per.toPrecision(3) : per.toFixed(4)} USD` +
+        const from = msg.rates[cur.value], dest = msg.rates[to.value];
+        if (a == null || !from || !dest) { out.textContent = "—"; foot.textContent = ""; return; }
+        const per = dest / from; // rates are per 1 USD, so go through USD
+        out.textContent = formatMoney(a * per, to.value);
+        foot.textContent = `1 ${cur.value} = ${formatRate(per)} ${to.value}` +
           (msg.updated ? ` · rates from ${new Date(msg.updated).toLocaleDateString()}` : "") +
           (msg.stale ? " (offline, cached)" : "");
       };
@@ -158,6 +184,10 @@
         cur.classList.remove("unsure");
         $(".warn").classList.remove("show");
         try { browser.storage.local.set({ lastCurrency: cur.value }); } catch {}
+        update();
+      });
+      to.addEventListener("change", () => {
+        try { browser.storage.local.set({ targetCurrency: to.value }); } catch {}
         update();
       });
       update();

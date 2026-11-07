@@ -7,8 +7,9 @@ Select a foreign price on any web page, right-click, and choose **Convert “…
 - Detects ISO codes (`EUR`, `SEK`, `CHF`…), symbols (`€`, `£`, `₩`, `₹`, `R$`, `CA$`, `zł`…) and words ("yen", "euros", "pesos").
 - Understands local number formats: `1.234,56`, `1,234.50`, `1 499,00`, `2.5k`, `3 million`.
 - Ambiguous symbols (`$`, `¥`, `kr`, "rupees") show a highlighted dropdown so you can pick the currency. The site's country domain is used to choose the first guess.
+- Converts to USD by default, or pick any other target currency in the card's **to** dropdown. Your choice is remembered and the right-click menu updates to match (e.g. **Convert “…” to EUR**).
 - Edit the amount or switch currency and the result updates instantly.
-- Remembers the last currency you picked.
+- Remembers the last source currency you picked.
 - Light and dark mode.
 
 ## Privacy

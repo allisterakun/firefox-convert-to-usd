@@ -2,10 +2,25 @@
 const RATES_URL = "https://open.er-api.com/v6/latest/USD";
 const MAX_AGE_MS = 6 * 60 * 60 * 1000; // refresh rates every 6 hours
 
+const menuTitle = (code) => `Convert “%s” to ${code}`;
+
 browser.menus.create({
   id: "convert-to-usd",
-  title: "Convert “%s” to USD",
+  title: menuTitle("USD"),
   contexts: ["selection"],
+});
+
+async function getTarget() {
+  const { targetCurrency } = await browser.storage.local.get("targetCurrency");
+  return targetCurrency || "USD";
+}
+
+// Keep the menu label in sync with the currency picked in the card.
+getTarget().then((code) => browser.menus.update("convert-to-usd", { title: menuTitle(code) }));
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.targetCurrency) {
+    browser.menus.update("convert-to-usd", { title: menuTitle(changes.targetCurrency.newValue || "USD") });
+  }
 });
 
 async function getRates() {
@@ -38,10 +53,11 @@ browser.menus.onClicked.addListener(async (info, tab) => {
   try {
     const { rates, updated, stale } = await getRates();
     const { lastCurrency } = await browser.storage.local.get("lastCurrency");
+    const target = await getTarget();
     let hostname = "";
     try { hostname = new URL(info.frameUrl || info.pageUrl || tab.url).hostname; } catch {}
     const det = detectCurrency(text, Object.keys(rates), hostname, lastCurrency || "EUR");
-    payload = { type: "fxusd-show", text, rates, updated, stale, ...det };
+    payload = { type: "fxusd-show", text, rates, updated, stale, target, ...det };
   } catch (e) {
     payload = { type: "fxusd-show", text, error: "Couldn't load exchange rates: " + e.message };
   }
@@ -53,14 +69,15 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     // Pages like about: or addons.mozilla.org block scripts; show a notification instead.
     let msg = payload.error || "";
     if (!msg && payload.amount != null && payload.rates) {
-      const usd = payload.amount / payload.rates[payload.guess];
-      msg = `${payload.amount} ${payload.guess} ≈ $${usd.toFixed(2)} USD` +
+      const t = payload.rates[payload.target] ? payload.target : "USD";
+      const converted = (payload.amount / payload.rates[payload.guess]) * payload.rates[t];
+      msg = `${payload.amount} ${payload.guess} ≈ ${converted.toFixed(2)} ${t}` +
         (payload.confident ? "" : ` (currency guessed: ${payload.guess})`);
     }
     browser.notifications.create({
       type: "basic",
       iconUrl: "icon-96.png",
-      title: "Convert to USD",
+      title: "Convert currency",
       message: msg || "Couldn't read an amount from the selection.",
     });
   }

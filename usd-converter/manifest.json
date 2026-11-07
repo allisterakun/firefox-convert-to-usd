@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Convert to USD",
-  "version": "1.0.0",
-  "description": "Right-click selected text with a foreign price and convert it to US dollars.",
+  "version": "1.1.0",
+  "description": "Right-click selected text with a foreign price and convert it to US dollars or any currency you choose.",
   "browser_specific_settings": {
     "gecko": {
       "id": "convert-to-usd@allisterakun",
