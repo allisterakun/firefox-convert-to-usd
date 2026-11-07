@@ -1,0 +1,31 @@
+{
+  "manifest_version": 2,
+  "name": "Convert to USD",
+  "version": "1.0.0",
+  "description": "Right-click selected text with a foreign price and convert it to US dollars.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "convert-to-usd@allisterakun",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "permissions": [
+    "menus",
+    "activeTab",
+    "storage",
+    "notifications",
+    "https://open.er-api.com/*"
+  ],
+  "background": {
+    "scripts": ["parse.js", "background.js"],
+    "persistent": true
+  },
+  "icons": {
+    "48": "icon-48.png",
+    "96": "icon-96.png",
+    "128": "icon-128.png"
+  }
+}
